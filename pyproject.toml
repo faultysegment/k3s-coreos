@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Fedora CoreOS configuration for K3s Kubernetes cluster with TUI ISO creator"
 authors = ["faultysegment"]
 readme = "CLAUDE.md"
-packages = []
+packages = [{include = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.8.1"
@@ -17,7 +17,7 @@ flake8 = "^6.0.0"
 mypy = "^1.0.0"
 
 [tool.poetry.scripts]
-create-iso = "create_iso:main"
+create-iso = "src.create_iso:main"
 
 [build-system]
 requires = ["poetry-core"]

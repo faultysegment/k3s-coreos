@@ -2,9 +2,51 @@
 
 import os
 import glob
+import tempfile
+import platform
+import getpass
 from pathlib import Path
 from typing import List, Optional, Dict
 from dataclasses import dataclass
+
+
+class CacheDirectoryManager:
+    """Manages cache directories across different operating systems."""
+
+    @staticmethod
+    def get_system_cache_dir() -> Path:
+        """Get system-appropriate cache directory."""
+        system = platform.system().lower()
+
+        if system == "linux":
+            # Use XDG_CACHE_HOME or fallback to ~/.cache
+            cache_home = os.environ.get("XDG_CACHE_HOME")
+            if cache_home:
+                return Path(cache_home)
+            return Path.home() / ".cache"
+        elif system == "darwin":  # macOS
+            return Path.home() / "Library" / "Caches"
+        elif system == "windows":
+            # Use LOCALAPPDATA or fallback
+            local_appdata = os.environ.get("LOCALAPPDATA")
+            if local_appdata:
+                return Path(local_appdata)
+            return Path.home() / "AppData" / "Local"
+        else:
+            # Fallback for unknown systems
+            return Path.home() / ".cache"
+
+    @staticmethod
+    def get_app_cache_dir(app_name: str = "k3s-coreos") -> Path:
+        """Get application-specific cache directory."""
+        cache_dir = CacheDirectoryManager.get_system_cache_dir() / app_name
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+
+    @staticmethod
+    def get_temp_dir() -> Path:
+        """Get system temporary directory."""
+        return Path(tempfile.gettempdir())
 
 
 @dataclass
@@ -16,16 +58,35 @@ class ISOCreationConfig:
     ignition_file: Optional[str] = None
     base_iso: str = "fedora-coreos.iso"
     ssh_key: Optional[str] = None
-    hostname: Optional[str] = None
-    username: str = "user"
+    hostname: str = "k3s"
+    username: Optional[str] = None
+    cache_dir: Optional[Path] = None
+    temp_dir: Optional[Path] = None
 
     def __post_init__(self):
         """Auto-generate derived fields after initialization."""
+        # Set default username if not provided
+        if not self.username:
+            self.username = getpass.getuser()
+
+        # Initialize cache and temp directories
+        if not self.cache_dir:
+            self.cache_dir = CacheDirectoryManager.get_app_cache_dir()
+
+        if not self.temp_dir:
+            self.temp_dir = CacheDirectoryManager.get_temp_dir()
+
+        # Set file paths in cache directory if not specified
         if not self.ignition_file:
-            self.ignition_file = "server.ign"
+            # Use simple temp path - will be handled by controller's context manager
+            self.ignition_file = str(self.temp_dir / "server.ign")
 
         if not self.output_iso:
             self.output_iso = "server.iso"
+
+        # Move base ISO to cache directory
+        if self.base_iso == "fedora-coreos.iso":
+            self.base_iso = str(self.cache_dir / "fedora-coreos.iso")
 
     def validate(self) -> List[str]:
         """Validate configuration and return list of errors."""

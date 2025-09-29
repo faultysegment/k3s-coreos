@@ -62,6 +62,18 @@ class TestTUIView(unittest.TestCase):
         self.assertEqual(config.install_disk, "/dev/sda")
         self.assertEqual(config.output_iso, "server.iso")
 
+        # Verify that username prompt uses the config's default username
+        username_prompt_call = mock_prompt.call_args_list[0]
+        self.assertEqual(username_prompt_call[0][0], "Username for the system")
+        # The default should be the system username (from config)
+        import getpass
+        self.assertEqual(username_prompt_call[1]['default'], getpass.getuser())
+
+        # Verify that hostname prompt uses the config's default hostname
+        hostname_prompt_call = mock_prompt.call_args_list[1]
+        self.assertEqual(hostname_prompt_call[0][0], "Hostname for the system")
+        self.assertEqual(hostname_prompt_call[1]['default'], "k3s")
+
     @patch.object(SSHKeyFinder, 'get_ssh_info')
     @patch('rich.prompt.Prompt.ask')
     def test_configure_ssh_key_no_keys_found(self, mock_prompt, mock_ssh_info):
@@ -121,10 +133,9 @@ class TestTUIView(unittest.TestCase):
     @patch.object(Console, 'print')
     def test_show_settings_summary_minimal(self, mock_print):
         """Test settings summary with minimal configuration."""
+        import getpass
         config = ISOCreationConfig(
-            ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... user@host",
-            hostname="test-host",
-            username="user"  # Default username
+            ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... user@host"
         )
 
         self.view.show_settings_summary(config)
@@ -139,7 +150,7 @@ class TestTUIView(unittest.TestCase):
         config = ISOCreationConfig(
             ssh_key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host",
             hostname="custom-host",
-            username="admin",  # Custom username
+            username="admin",
             install_disk="/dev/nvme0n1",
             output_iso="custom.iso"
         )

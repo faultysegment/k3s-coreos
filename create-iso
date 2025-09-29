@@ -1,12 +1,30 @@
 #!/usr/bin/env python3
 
+"""
+Wrapper script for Python ISO creation tool.
+Direct import entry point.
+"""
+
 import sys
-import os
+from pathlib import Path
 
-# Add src directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+def main():
+    """Main entry point for the create-iso wrapper."""
+    # Add src to path for imports
+    src_path = Path(__file__).parent / "src"
+    sys.path.insert(0, str(src_path))
 
-from create_iso import main
+    # Import and run the main function directly
+    try:
+        from create_iso import main as create_iso_main
+        create_iso_main()
+    except ImportError as e:
+        print(f"Error importing create_iso module: {e}")
+        print("Make sure you're running from the project root directory.")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nOperation cancelled by user")
+        sys.exit(130)
 
 if __name__ == "__main__":
     main()

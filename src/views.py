@@ -99,10 +99,10 @@ class TUIView(BaseView):
         config.ssh_key = self._configure_ssh_key()
 
         # Configure username
-        config.username = Prompt.ask("Username for the system", default="user")
+        config.username = Prompt.ask("Username for the system", default=config.username)
 
         # Configure hostname
-        config.hostname = Prompt.ask("Hostname for the system")
+        config.hostname = Prompt.ask("Hostname for the system", default=config.hostname)
 
         # Configure target disk
         config.install_disk = Prompt.ask(
@@ -167,35 +167,21 @@ class TUIView(BaseView):
             return Prompt.ask("SSH public key (paste the entire key)")
 
     def show_settings_summary(self, config: ISOCreationConfig) -> None:
-        """Display settings summary in a table, showing only user-provided settings."""
-        table = Table(title="User Configuration", show_header=False)
-        table.add_column("Parameter", style="cyan")
+        """Display settings summary showing all user-configurable options."""
+        table = Table(title="Your Configuration", show_header=False)
+        table.add_column("Option", style="cyan")
         table.add_column("Value", style="yellow")
 
-        # Only show SSH key if provided
+        # SSH key (truncated for display)
         if config.ssh_key:
             ssh_display = f"{config.ssh_key[:20]}..." if len(config.ssh_key) > 20 else config.ssh_key
             table.add_row("SSH key", ssh_display)
 
-        # Only show username if it's not the default
-        if config.username != "user":
-            table.add_row("Username", config.username)
-
-        # Only show hostname if provided
-        if config.hostname:
-            table.add_row("Hostname", config.hostname)
-
-        # Only show target disk if it's not the default
-        if config.install_disk != "/dev/sda":
-            table.add_row("Target disk", config.install_disk)
-
-        # Only show output ISO if it's not the default
-        if config.output_iso and config.output_iso != "server.iso":
-            table.add_row("Output ISO", config.output_iso)
-
-        # Only show base ISO if it's not the default
-        if config.base_iso != "fedora-coreos.iso":
-            table.add_row("Base ISO", config.base_iso)
+        # Show all user-configurable options
+        table.add_row("Username", config.username)
+        table.add_row("Hostname", config.hostname)
+        table.add_row("Target disk", config.install_disk)
+        table.add_row("Output ISO", config.output_iso)
 
         self.console.print(table)
         self.console.print()

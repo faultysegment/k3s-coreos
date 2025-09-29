@@ -160,5 +160,6 @@ The Python ISO creator follows MVC (Model-View-Controller) pattern:
 - The system is designed for immutable infrastructure - changes should be made to Butane config, not running systems
 - K3s version is pinned in the Butane config (`v1.26.3+k3s1`) - update the hash when changing versions
 - The configuration assumes x86_64 architecture
-- SSH access is configured for the `faultysegment` user with sudo privileges
+- SSH access is configured for the current system user (automatically detected) with sudo privileges
+- Default hostname is set to "k3s" for convenience
 - Python code follows MVC pattern for better maintainability and testability

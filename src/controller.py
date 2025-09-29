@@ -2,14 +2,16 @@
 
 import os
 import subprocess
+import tempfile
 from typing import List
 from pathlib import Path
+from contextlib import contextmanager
 
 try:
-    from .models import ISOCreationConfig
+    from .models import ISOCreationConfig, CacheDirectoryManager
     from .views import BaseView
 except ImportError:
-    from models import ISOCreationConfig
+    from models import ISOCreationConfig, CacheDirectoryManager
     from views import BaseView
 
 
@@ -19,6 +21,25 @@ class ConsoleController:
     def __init__(self, view: BaseView):
         self.view = view
         self.config: ISOCreationConfig = ISOCreationConfig()
+
+    @contextmanager
+    def _temp_file(self, suffix='', prefix='', content=''):
+        """Context manager for temporary files that auto-cleanup."""
+        temp_fd, temp_path = tempfile.mkstemp(
+            suffix=suffix,
+            prefix=prefix,
+            dir=str(self.config.temp_dir)
+        )
+        try:
+            if content:
+                with os.fdopen(temp_fd, 'w') as f:
+                    f.write(content)
+            else:
+                os.close(temp_fd)
+            yield temp_path
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
     def run_command(
         self, cmd: List[str], description: str
@@ -38,8 +59,9 @@ class ConsoleController:
             self.view.show_error(error_msg)
             raise
 
-    def process_butane_template(self) -> str:
-        """Process Butane template file with configuration variables."""
+    @contextmanager
+    def process_butane_template(self):
+        """Process Butane template file with configuration variables, yields temp file path."""
         # Get template from resources
         try:
             # Try to get from package resources first
@@ -61,45 +83,23 @@ class ConsoleController:
         processed_content = processed_content.replace('{{HOSTNAME}}', self.config.hostname)
         processed_content = processed_content.replace('{{USERNAME}}', self.config.username)
 
-        # Create temporary butane file
-        temp_butane_file = "server.processed.bu"
-        with open(temp_butane_file, 'w') as f:
-            f.write(processed_content)
+        # Use context manager for temp file
+        with self._temp_file(suffix='.bu', prefix='server-', content=processed_content) as temp_path:
+            yield temp_path
 
-        return temp_butane_file
+    @contextmanager
+    def _create_ignition_file(self):
+        """Create temporary ignition file that auto-cleans up."""
+        with self._temp_file(suffix='.ign', prefix='server-') as ignition_path:
+            # Temporarily store the path in config for other methods to use
+            old_ignition_file = self.config.ignition_file
+            self.config.ignition_file = ignition_path
+            try:
+                yield ignition_path
+            finally:
+                # Restore original path
+                self.config.ignition_file = old_ignition_file
 
-    def generate_ignition(self) -> None:
-        """Generate Ignition file from Butane configuration."""
-        self.view.show_step("Step 1", "Generate Ignition file")
-
-        if not self.config.ignition_file:
-            raise ValueError("Ignition file not configured")
-
-        # Process template to create temporary butane file
-        temp_butane_file = self.process_butane_template()
-
-        try:
-            # Convert Butane to Ignition
-            cmd = [
-                "butane",
-                "--pretty",
-                "--strict",
-                temp_butane_file,
-                "--output",
-                self.config.ignition_file,
-            ]
-            self.run_command(cmd, "Converting Butane to Ignition")
-
-            # Validate Ignition file
-            cmd = ["ignition-validate", self.config.ignition_file]
-            self.run_command(cmd, "Validating Ignition file")
-
-            print(f"✅ Ignition file created: {self.config.ignition_file}")
-            print()
-        finally:
-            # Clean up temporary file
-            if os.path.exists(temp_butane_file):
-                os.remove(temp_butane_file)
 
     def download_base_iso(self) -> None:
         """Download base Fedora CoreOS ISO if needed."""
@@ -112,7 +112,7 @@ class ConsoleController:
         cmd = ["coreos-installer", "download", "-f", "iso", "--decompress"]
         result = self.run_command(cmd, "Downloading Fedora CoreOS ISO")
 
-        # Find downloaded file and rename
+        # Find downloaded file and rename to cache directory
         downloaded_iso = result.stdout.strip()
         if downloaded_iso and os.path.exists(downloaded_iso):
             os.rename(downloaded_iso, self.config.base_iso)
@@ -159,6 +159,7 @@ class ConsoleController:
         print(f"🎉 Custom ISO created: {self.config.output_iso}")
         print()
 
+
     def create_iso(self) -> None:
         """Main method to create ISO with full process."""
         try:
@@ -182,13 +183,44 @@ class ConsoleController:
 
             print()
 
-            # Execute creation steps
-            self.generate_ignition()
-            self.download_base_iso()
-            self.customize_iso()
+            # Execute creation steps with ignition file in context manager
+            with self._create_ignition_file() as ignition_file:
+                # Step 1: Generate ignition file
+                self.view.show_step("Step 1", "Generate Ignition file")
+                with self.process_butane_template() as temp_butane_file:
+                    # Convert Butane to Ignition
+                    cmd = [
+                        "butane",
+                        "--pretty",
+                        "--strict",
+                        temp_butane_file,
+                        "--output",
+                        ignition_file,
+                    ]
+                    self.run_command(cmd, "Converting Butane to Ignition")
 
-            # Show completion
-            self.view.show_completion(self.config)
+                    # Validate Ignition file
+                    cmd = ["ignition-validate", ignition_file]
+                    self.run_command(cmd, "Validating Ignition file")
+
+                    print(f"✅ Ignition file created: {ignition_file}")
+                    print()
+
+                # Step 2: Download base ISO
+                self.download_base_iso()
+
+                # Step 3: Customize ISO (temporarily update config to use context manager's ignition file)
+                old_ignition_file = self.config.ignition_file
+                self.config.ignition_file = ignition_file
+                try:
+                    self.customize_iso()
+                finally:
+                    self.config.ignition_file = old_ignition_file
+
+                # Show completion
+                self.view.show_completion(self.config)
+
+            # All temp files automatically cleaned up by context managers
 
         except KeyboardInterrupt:
             print("\nOperation interrupted by user")

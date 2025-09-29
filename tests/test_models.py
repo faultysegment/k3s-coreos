@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-from src.models import ISOCreationConfig, ButaneFileFinder, SSHKeyFinder
+from src.models import ISOCreationConfig, ButaneFileFinder, SSHKeyFinder, CacheDirectoryManager
 
 
 class TestISOCreationConfig(unittest.TestCase):
@@ -14,18 +14,25 @@ class TestISOCreationConfig(unittest.TestCase):
 
     def test_default_values(self):
         """Test default values are set correctly."""
+        import getpass
         config = ISOCreationConfig()
         self.assertEqual(config.install_disk, "/dev/sda")
-        self.assertEqual(config.base_iso, "fedora-coreos.iso")
-        self.assertEqual(config.username, "user")
+        self.assertEqual(config.username, getpass.getuser())
+        self.assertEqual(config.hostname, "k3s")
         self.assertIsNone(config.ssh_key)
-        self.assertIsNone(config.hostname)
+        # Cache and temp directories should be auto-initialized
+        self.assertIsNotNone(config.cache_dir)
+        self.assertIsNotNone(config.temp_dir)
 
     def test_post_init_auto_generation(self):
         """Test that __post_init__ generates derived fields."""
         config = ISOCreationConfig()
-        self.assertEqual(config.ignition_file, "server.ign")
+        # Ignition file should be in temp directory now
+        self.assertTrue(config.ignition_file.endswith("server.ign"))
         self.assertEqual(config.output_iso, "server.iso")
+        # Base ISO should be in cache directory
+        self.assertTrue(config.base_iso.endswith("fedora-coreos.iso"))
+        self.assertIn("k3s-coreos", str(config.base_iso))
 
     def test_validation_missing_required_fields(self):
         """Test validation fails when required fields are missing."""
@@ -33,15 +40,14 @@ class TestISOCreationConfig(unittest.TestCase):
         errors = config.validate()
 
         self.assertIn("SSH key must be specified", errors)
-        self.assertIn("Hostname must be specified", errors)
+        # Hostname should not be required anymore since it has default value
+        self.assertNotIn("Hostname must be specified", errors)
         self.assertFalse(config.is_valid())
 
     def test_validation_with_all_fields(self):
         """Test validation passes with all required fields."""
         config = ISOCreationConfig(
-            ssh_key="ssh-rsa AAAAB... test@example.com",
-            hostname="test-host",
-            username="testuser"
+            ssh_key="ssh-rsa AAAAB... test@example.com"
         )
         errors = config.validate()
 
@@ -49,15 +55,20 @@ class TestISOCreationConfig(unittest.TestCase):
         self.assertTrue(config.is_valid())
 
     def test_validation_empty_username(self):
-        """Test validation fails with empty username."""
+        """Test that empty username gets replaced with system username."""
+        import getpass
         config = ISOCreationConfig(
             ssh_key="ssh-rsa AAAAB... test@example.com",
             hostname="test-host",
             username=""
         )
-        errors = config.validate()
 
-        self.assertIn("Username must be specified", errors)
+        # Empty username should be replaced with system username
+        self.assertEqual(config.username, getpass.getuser())
+
+        # Should pass validation since system username is used
+        errors = config.validate()
+        self.assertEqual(len(errors), 0)
 
     def test_file_existence_properties(self):
         """Test file existence properties."""
@@ -97,6 +108,110 @@ class TestISOCreationConfig(unittest.TestCase):
         self.assertEqual(config.ssh_key, "ssh-ed25519 AAAAC... user@host")
         self.assertEqual(config.hostname, "custom-host")
         self.assertEqual(config.username, "admin")
+        # Cache and temp dirs should still be initialized even with custom values
+        self.assertIsNotNone(config.cache_dir)
+        self.assertIsNotNone(config.temp_dir)
+
+    @patch('getpass.getuser', return_value='testuser')
+    def test_default_username_from_system(self, mock_getuser):
+        """Test that default username comes from system user."""
+        config = ISOCreationConfig()
+        self.assertEqual(config.username, 'testuser')
+        mock_getuser.assert_called_once()
+
+    def test_explicit_username_overrides_default(self):
+        """Test that explicitly set username overrides system default."""
+        config = ISOCreationConfig(username='custom-user')
+        self.assertEqual(config.username, 'custom-user')
+        # Should not be the system user (unless coincidentally the same)
+        import getpass
+        if getpass.getuser() != 'custom-user':
+            self.assertNotEqual(config.username, getpass.getuser())
+
+
+class TestCacheDirectoryManager(unittest.TestCase):
+    """Test cases for CacheDirectoryManager class."""
+
+    @patch('platform.system')
+    def test_get_system_cache_dir_linux(self, mock_system):
+        """Test cache directory detection on Linux."""
+        mock_system.return_value = 'Linux'
+        with patch.dict('os.environ', {}, clear=True):
+            cache_dir = CacheDirectoryManager.get_system_cache_dir()
+            expected = Path.home() / ".cache"
+            self.assertEqual(cache_dir, expected)
+
+    @patch('platform.system')
+    def test_get_system_cache_dir_linux_xdg(self, mock_system):
+        """Test cache directory detection on Linux with XDG_CACHE_HOME."""
+        mock_system.return_value = 'Linux'
+        test_cache_home = "/custom/cache"
+        with patch.dict('os.environ', {'XDG_CACHE_HOME': test_cache_home}):
+            cache_dir = CacheDirectoryManager.get_system_cache_dir()
+            self.assertEqual(cache_dir, Path(test_cache_home))
+
+    @patch('platform.system')
+    def test_get_system_cache_dir_macos(self, mock_system):
+        """Test cache directory detection on macOS."""
+        mock_system.return_value = 'Darwin'
+        cache_dir = CacheDirectoryManager.get_system_cache_dir()
+        expected = Path.home() / "Library" / "Caches"
+        self.assertEqual(cache_dir, expected)
+
+    @patch('platform.system')
+    def test_get_system_cache_dir_windows(self, mock_system):
+        """Test cache directory detection on Windows."""
+        mock_system.return_value = 'Windows'
+        test_local_appdata = "C:\\Users\\TestUser\\AppData\\Local"
+        with patch.dict('os.environ', {'LOCALAPPDATA': test_local_appdata}):
+            cache_dir = CacheDirectoryManager.get_system_cache_dir()
+            self.assertEqual(cache_dir, Path(test_local_appdata))
+
+    @patch('platform.system')
+    def test_get_system_cache_dir_windows_fallback(self, mock_system):
+        """Test cache directory detection on Windows with fallback."""
+        mock_system.return_value = 'Windows'
+        with patch.dict('os.environ', {}, clear=True):
+            cache_dir = CacheDirectoryManager.get_system_cache_dir()
+            expected = Path.home() / "AppData" / "Local"
+            self.assertEqual(cache_dir, expected)
+
+    @patch('platform.system')
+    def test_get_system_cache_dir_unknown_system(self, mock_system):
+        """Test cache directory detection on unknown system."""
+        mock_system.return_value = 'UnknownOS'
+        cache_dir = CacheDirectoryManager.get_system_cache_dir()
+        expected = Path.home() / ".cache"
+        self.assertEqual(cache_dir, expected)
+
+    def test_get_app_cache_dir_creates_directory(self):
+        """Test that app cache directory is created if it doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_cache = Path(tmp_dir) / "cache"
+
+            with patch.object(CacheDirectoryManager, 'get_system_cache_dir', return_value=base_cache):
+                app_cache_dir = CacheDirectoryManager.get_app_cache_dir("test-app")
+
+                self.assertEqual(app_cache_dir, base_cache / "test-app")
+                self.assertTrue(app_cache_dir.exists())
+
+    def test_get_app_cache_dir_default_name(self):
+        """Test app cache directory with default name."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            base_cache = Path(tmp_dir) / "cache"
+
+            with patch.object(CacheDirectoryManager, 'get_system_cache_dir', return_value=base_cache):
+                app_cache_dir = CacheDirectoryManager.get_app_cache_dir()
+
+                self.assertEqual(app_cache_dir, base_cache / "k3s-coreos")
+                self.assertTrue(app_cache_dir.exists())
+
+    @patch('tempfile.gettempdir')
+    def test_get_temp_dir(self, mock_gettempdir):
+        """Test temp directory detection."""
+        mock_gettempdir.return_value = "/custom/temp"
+        temp_dir = CacheDirectoryManager.get_temp_dir()
+        self.assertEqual(temp_dir, Path("/custom/temp"))
 
 
 class TestButaneFileFinder(unittest.TestCase):
