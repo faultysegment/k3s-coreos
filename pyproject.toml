@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "k3s-coreos"
+version = "0.1.0"
+description = "Fedora CoreOS configuration for K3s Kubernetes cluster with TUI ISO creator"
+authors = ["faultysegment"]
+readme = "CLAUDE.md"
+packages = []
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+rich = "^13.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+black = "^23.0.0"
+flake8 = "^6.0.0"
+mypy = "^1.0.0"
+
+[tool.poetry.scripts]
+create-iso = "create_iso:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+no_implicit_reexport = false
+
+[[tool.mypy.overrides]]
+module = "src.*"
+ignore_errors = true
