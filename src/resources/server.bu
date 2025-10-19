@@ -8,26 +8,40 @@ passwd:
         - {{SSH_KEY}}
 systemd:
   units:
-    - name: "rpm-ostree-install-k3s-dependencies.service"
+    - name: "rpm-ostree-install-packages.service"
       enabled: true
       contents: |
         [Unit]
-        Description=Install k3s dependencies
+        Description=Install package 
         Wants=network-online.target
         After=network-online.target
         Before=zincati.service
         ConditionPathExists=|!/usr/bin/kubectl
         ConditionPathExists=|!/usr/share/selinux/packages/k3s.pp
+        ConditionPathExists=|!/usr/bin/avahi-daemon
 
         [Service]
         Type=oneshot
         RemainAfterExit=yes
-        ExecStart=rpm-ostree install --apply-live --allow-inactive --assumeyes kubectl k3s-selinux avahi
+        ExecStart=rpm-ostree install --apply-live --allow-inactive --assumeyes kubectl k3s-selinux avahi nss-mdns
+        ExecStartPost=/usr/bin/systemctl try-reload-or-restart dbus.service
 
         [Install]
         WantedBy=multi-user.target
     - name: "avahi-daemon.service"
       enabled: true
+      dropins:
+      - name: 10-dbus-dependency.conf
+        contents: |
+          [Unit]
+          Description=Avahi mDNS/DNS-SD Stack (with D-Bus dependency)
+          Requires=dbus.service
+          After=dbus.service
+      - name: 20-wait-for-network.conf
+        contents: |
+          [Unit]
+          Wants=network-online.target
+          After=network-online.target
     - name: "k3s.service"
       enabled: true
       contents: |
@@ -94,6 +108,7 @@ storage:
       wipe_filesystem: false # preserve /var on reinstall (this is the default, but be explicit)
       with_mount_unit: true  # mount this filesystem in the real root
   files:
+
     - path: /etc/yum.repos.d/kubernetes.repo
       mode: 0644
       contents:
@@ -145,55 +160,24 @@ storage:
       contents:
         inline: |
           {{HOSTNAME}}
-    - path: /etc/avahi/avahi-daemon.conf
+    - path: /etc/dbus-1/system.d/avahi-dbus.conf
       mode: 0644
+      user:
+        name: root
+      group:
+        name: root
       contents:
         inline: |
-          [server]
-          host-name={{HOSTNAME}}
-          domain-name=local
-          browse-domains=local
-          use-ipv4=yes
-          use-ipv6=yes
-          allow-interfaces=
-          deny-interfaces=
-          check-response-ttl=no
-          use-iff-running=no
-          enable-dbus=yes
-          disallow-other-stacks=no
-          allow-point-to-point=no
-          cache-entries-max=4096
-          clients-max=4096
-          objects-per-client-max=1024
-          entries-per-entry-group-max=32
-          ratelimit-interval-usec=1000000
-          ratelimit-burst=1000
-
-          [wide-area]
-          enable-wide-area=yes
-
-          [publish]
-          disable-publishing=no
-          disable-user-service-publishing=no
-          add-service-cookie=no
-          publish-addresses=yes
-          publish-hinfo=yes
-          publish-workstation=no
-          publish-domain=yes
-          publish-dns-servers=
-          publish-resolv-conf-dns-servers=no
-          publish-aaaa-on-ipv4=yes
-          publish-a-on-ipv6=no
-
-          [reflector]
-          enable-reflector=no
-          reflect-ipv=no
-
-          [rlimits]
-          rlimit-as=
-          rlimit-core=0
-          rlimit-data=8388608
-          rlimit-fsize=0
-          rlimit-nofile=768
-          rlimit-stack=8388608
-          rlimit-nproc=3
+          <!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+          <busconfig>
+            <policy user="avahi">
+              <allow own="org.freedesktop.Avahi"/>
+            </policy>
+            <policy user="root">
+              <allow own="org.freedesktop.Avahi"/>
+            </policy>
+            <policy context="default">
+              <allow send_destination="org.freedesktop.Avahi"/>
+              <allow receive_sender="org.freedesktop.Avahi"/>
+            </policy>
+          </busconfig>
