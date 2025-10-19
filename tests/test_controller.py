@@ -20,7 +20,7 @@ class TestConsoleController(unittest.TestCase):
         self.valid_config = ISOCreationConfig(
             ssh_key="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... user@host",
             hostname="test-host",
-            username="testuser"
+            username="testuser",
         )
         self.controller.config = self.valid_config
 
@@ -42,7 +42,9 @@ class TestConsoleController(unittest.TestCase):
 
     def test_run_command_failure(self):
         """Test command execution failure handling."""
-        error = subprocess.CalledProcessError(1, ["false"], "Error output", "Error stderr")
+        error = subprocess.CalledProcessError(
+            1, ["false"], "Error output", "Error stderr"
+        )
         self.mock_view.execute_with_progress.side_effect = error
 
         with self.assertRaises(subprocess.CalledProcessError):
@@ -50,11 +52,17 @@ class TestConsoleController(unittest.TestCase):
 
         self.mock_view.show_error.assert_called_once()
 
-    @patch('builtins.open', new_callable=mock_open, read_data="template content {{SSH_KEY}} {{HOSTNAME}} {{USERNAME}}")
-    @patch('pathlib.Path.exists', return_value=True)
-    @patch('tempfile.mkstemp')
-    @patch('os.fdopen')
-    def test_process_butane_template(self, mock_fdopen, mock_mkstemp, mock_exists, mock_file):
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="template content {{SSH_KEY}} {{HOSTNAME}} {{USERNAME}}",
+    )
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("tempfile.mkstemp")
+    @patch("os.fdopen")
+    def test_process_butane_template(
+        self, mock_fdopen, mock_mkstemp, mock_exists, mock_file
+    ):
         """Test Butane template processing with context manager."""
         mock_mkstemp.return_value = (123, "/tmp/server-abc123.bu")
         mock_write_file = Mock()
@@ -63,7 +71,9 @@ class TestConsoleController(unittest.TestCase):
         # Test the context manager
         with self.controller.process_butane_template() as temp_file:
             # Verify template file was read
-            mock_file.assert_any_call(Path(__file__).parent.parent / "src" / "resources" / "server.bu", 'r')
+            mock_file.assert_any_call(
+                Path(__file__).parent.parent / "src" / "resources" / "server.bu", "r"
+            )
 
             # Verify temporary file was created
             mock_mkstemp.assert_called_once()
@@ -75,7 +85,7 @@ class TestConsoleController(unittest.TestCase):
         expected_content = "template content ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAAB... user@host test-host testuser"
         mock_write_file.write.assert_called_once_with(expected_content)
 
-    @patch('pathlib.Path.exists', return_value=False)
+    @patch("pathlib.Path.exists", return_value=False)
     def test_process_butane_template_missing_file(self, mock_exists):
         """Test template processing with missing template file."""
         with self.assertRaises(ValueError) as context:
@@ -84,71 +94,83 @@ class TestConsoleController(unittest.TestCase):
 
         self.assertIn("Template file not found", str(context.exception))
 
-    @patch('tempfile.mkstemp')
-    @patch('os.remove')
-    @patch('os.path.exists', return_value=True)
-    @patch('os.fdopen')
-    @patch('os.close')
-    def test_temp_file_context_manager(self, mock_close, mock_fdopen, mock_exists, mock_remove, mock_mkstemp):
+    @patch("tempfile.mkstemp")
+    @patch("os.remove")
+    @patch("os.path.exists", return_value=True)
+    @patch("os.fdopen")
+    @patch("os.close")
+    def test_temp_file_context_manager(
+        self, mock_close, mock_fdopen, mock_exists, mock_remove, mock_mkstemp
+    ):
         """Test temporary file context manager."""
         mock_mkstemp.return_value = (123, "/tmp/test-abc123.temp")
         mock_write_file = Mock()
         mock_fdopen.return_value.__enter__.return_value = mock_write_file
         mock_fdopen.return_value.__exit__.return_value = None
 
-        with self.controller._temp_file(suffix='.test', prefix='demo-', content='test content') as temp_file:
+        with self.controller._temp_file(
+            suffix=".test", prefix="demo-", content="test content"
+        ) as temp_file:
             self.assertEqual(temp_file, "/tmp/test-abc123.temp")
             mock_mkstemp.assert_called_once_with(
-                suffix='.test',
-                prefix='demo-',
-                dir=str(self.controller.config.temp_dir)
+                suffix=".test", prefix="demo-", dir=str(self.controller.config.temp_dir)
             )
 
         # Verify content was written
-        mock_fdopen.assert_called_once_with(123, 'w')
-        mock_write_file.write.assert_called_once_with('test content')
+        mock_fdopen.assert_called_once_with(123, "w")
+        mock_write_file.write.assert_called_once_with("test content")
 
         # Verify cleanup happened
         mock_remove.assert_called_once_with("/tmp/test-abc123.temp")
 
-    @patch('tempfile.mkstemp')
-    @patch('os.close')
-    @patch('os.remove')
-    @patch('os.path.exists', return_value=True)
-    def test_create_ignition_file_context_manager(self, mock_exists, mock_remove, mock_close, mock_mkstemp):
+    @patch("tempfile.mkstemp")
+    @patch("os.close")
+    @patch("os.remove")
+    @patch("os.path.exists", return_value=True)
+    def test_create_ignition_file_context_manager(
+        self, mock_exists, mock_remove, mock_close, mock_mkstemp
+    ):
         """Test ignition file context manager."""
         mock_mkstemp.return_value = (123, "/tmp/server-abc123.ign")
         original_ignition_file = self.controller.config.ignition_file
 
         with self.controller._create_ignition_file() as ignition_file:
             self.assertEqual(ignition_file, "/tmp/server-abc123.ign")
-            self.assertEqual(self.controller.config.ignition_file, "/tmp/server-abc123.ign")
+            self.assertEqual(
+                self.controller.config.ignition_file, "/tmp/server-abc123.ign"
+            )
 
         # Verify original config is restored
         self.assertEqual(self.controller.config.ignition_file, original_ignition_file)
         # Verify cleanup happened
         mock_remove.assert_called_once_with("/tmp/server-abc123.ign")
 
-    @patch('tempfile.mkstemp')
-    @patch('os.remove')
-    @patch('os.close')
-    @patch('os.path.exists', return_value=True)
-    def test_temp_file_cleanup_on_exception(self, mock_exists, mock_close, mock_remove, mock_mkstemp):
+    @patch("tempfile.mkstemp")
+    @patch("os.remove")
+    @patch("os.close")
+    @patch("os.path.exists", return_value=True)
+    def test_temp_file_cleanup_on_exception(
+        self, mock_exists, mock_close, mock_remove, mock_mkstemp
+    ):
         """Test that temp files are cleaned up even when exceptions occur."""
         mock_mkstemp.return_value = (123, "/tmp/server-abc123.temp")
 
         # Simulate exception inside context manager
         with self.assertRaises(ValueError):
-            with self.controller._temp_file(suffix='.test', prefix='demo-') as temp_file:
+            with self.controller._temp_file(
+                suffix=".test", prefix="demo-"
+            ) as temp_file:
                 raise ValueError("Test exception")
 
         # Verify cleanup still happened despite exception
         mock_remove.assert_called_once_with("/tmp/server-abc123.temp")
 
-    @patch('tempfile.mkstemp')
-    @patch('os.remove')
-    @patch('os.fdopen')
-    def test_temp_file_with_content_write_failure(self, mock_fdopen, mock_remove, mock_mkstemp):
+    @patch("tempfile.mkstemp")
+    @patch("os.remove")
+    @patch("os.fdopen")
+    def test_temp_file_with_content_write_failure(
+        self, mock_fdopen, mock_remove, mock_mkstemp
+    ):
         """Test temp file cleanup when content write fails."""
         mock_mkstemp.return_value = (123, "/tmp/server-abc123.temp")
         mock_fdopen.side_effect = IOError("Write failed")
@@ -156,19 +178,29 @@ class TestConsoleController(unittest.TestCase):
         # The IOError occurs during context manager setup, so no cleanup is expected in finally block
         # Instead, the exception handling in the controller should clean up
         with self.assertRaises(IOError):
-            with self.controller._temp_file(suffix='.test', content='test') as temp_file:
+            with self.controller._temp_file(
+                suffix=".test", content="test"
+            ) as temp_file:
                 pass
 
         # No remove call expected since the exception happens during file creation
         mock_remove.assert_not_called()
 
-    @patch('builtins.open', new_callable=mock_open, read_data="template {{SSH_KEY}}")
-    @patch('pathlib.Path.exists', return_value=True)
-    @patch('tempfile.mkstemp')
-    @patch('os.remove')
-    @patch('os.fdopen')
-    @patch('os.path.exists', return_value=True)
-    def test_process_butane_template_auto_cleanup(self, mock_path_exists, mock_fdopen, mock_remove, mock_mkstemp, mock_exists, mock_file):
+    @patch("builtins.open", new_callable=mock_open, read_data="template {{SSH_KEY}}")
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("tempfile.mkstemp")
+    @patch("os.remove")
+    @patch("os.fdopen")
+    @patch("os.path.exists", return_value=True)
+    def test_process_butane_template_auto_cleanup(
+        self,
+        mock_path_exists,
+        mock_fdopen,
+        mock_remove,
+        mock_mkstemp,
+        mock_exists,
+        mock_file,
+    ):
         """Test that Butane template files are auto-cleaned up."""
         mock_mkstemp.return_value = (123, "/tmp/server-abc123.bu")
         mock_write_file = Mock()
@@ -183,16 +215,16 @@ class TestConsoleController(unittest.TestCase):
 
     def test_download_base_iso_exists(self):
         """Test base ISO download when file already exists."""
-        with patch('os.path.exists', return_value=True):
+        with patch("os.path.exists", return_value=True):
             self.controller.download_base_iso()
 
             # Should not attempt download
             self.mock_view.execute_with_progress.assert_not_called()
 
-    @patch('os.rename')
+    @patch("os.rename")
     def test_download_base_iso_success(self, mock_rename):
         """Test successful base ISO download."""
-        with patch('os.path.exists') as mock_exists:
+        with patch("os.path.exists") as mock_exists:
             # First call (checking base_iso_exists) returns False, second call (checking downloaded file) returns True
             mock_exists.side_effect = [False, True]
             mock_result = Mock()
@@ -201,17 +233,21 @@ class TestConsoleController(unittest.TestCase):
 
             self.controller.download_base_iso()
 
-            self.mock_view.show_step.assert_called_with("Step 2", "Download base Fedora CoreOS ISO")
+            self.mock_view.show_step.assert_called_with(
+                "Step 2", "Download base Fedora CoreOS ISO"
+            )
             self.mock_view.execute_with_progress.assert_called_once_with(
                 ["coreos-installer", "download", "-f", "iso", "--decompress"],
-                "Downloading Fedora CoreOS ISO"
+                "Downloading Fedora CoreOS ISO",
             )
-            mock_rename.assert_called_once_with("downloaded-file.iso", str(self.valid_config.base_iso))
+            mock_rename.assert_called_once_with(
+                "downloaded-file.iso", str(self.valid_config.base_iso)
+            )
 
-    @patch('os.remove')
+    @patch("os.remove")
     def test_customize_iso_remove_existing(self, mock_remove):
         """Test ISO customization removes existing output file."""
-        with patch('os.path.exists', return_value=True):
+        with patch("os.path.exists", return_value=True):
             mock_result = Mock()
             self.mock_view.execute_with_progress.return_value = mock_result
 
@@ -221,7 +257,7 @@ class TestConsoleController(unittest.TestCase):
 
     def test_customize_iso_success(self):
         """Test successful ISO customization."""
-        with patch('os.path.exists', return_value=False):
+        with patch("os.path.exists", return_value=False):
             mock_result = Mock()
             self.mock_view.execute_with_progress.return_value = mock_result
 
@@ -229,11 +265,16 @@ class TestConsoleController(unittest.TestCase):
 
             self.mock_view.show_step.assert_called_with("Step 3", "Create custom ISO")
             expected_cmd = [
-                "coreos-installer", "iso", "customize",
-                "--dest-ignition", self.valid_config.ignition_file,
-                "--dest-device", "/dev/sda",
-                "-o", "server.iso",
-                str(self.valid_config.base_iso)
+                "coreos-installer",
+                "iso",
+                "customize",
+                "--dest-ignition",
+                self.valid_config.ignition_file,
+                "--dest-device",
+                "/dev/sda",
+                "-o",
+                "server.iso",
+                str(self.valid_config.base_iso),
             ]
             self.mock_view.execute_with_progress.assert_called_once_with(
                 expected_cmd, "Embedding Ignition into ISO"
@@ -248,18 +289,35 @@ class TestConsoleController(unittest.TestCase):
 
         self.assertIn("Missing required configuration", str(context.exception))
 
-    @patch.object(ConsoleController, 'download_base_iso')
-    @patch.object(ConsoleController, 'customize_iso')
-    @patch('builtins.open', new_callable=mock_open, read_data="template {{SSH_KEY}} {{HOSTNAME}} {{USERNAME}}")
-    @patch('pathlib.Path.exists', return_value=True)
-    @patch('tempfile.mkstemp')
-    @patch('os.fdopen')
-    @patch('os.close')
-    @patch('os.remove')
-    def test_create_iso_success(self, mock_remove, mock_close, mock_fdopen, mock_mkstemp, mock_path_exists, mock_open_file, mock_customize, mock_download):
+    @patch.object(ConsoleController, "download_base_iso")
+    @patch.object(ConsoleController, "customize_iso")
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="template {{SSH_KEY}} {{HOSTNAME}} {{USERNAME}}",
+    )
+    @patch("pathlib.Path.exists", return_value=True)
+    @patch("tempfile.mkstemp")
+    @patch("os.fdopen")
+    @patch("os.close")
+    @patch("os.remove")
+    def test_create_iso_success(
+        self,
+        mock_remove,
+        mock_close,
+        mock_fdopen,
+        mock_mkstemp,
+        mock_path_exists,
+        mock_open_file,
+        mock_customize,
+        mock_download,
+    ):
         """Test successful full ISO creation process with context managers."""
         # Setup mocks
-        mock_mkstemp.side_effect = [(123, "/tmp/server-abc.ign"), (124, "/tmp/server-def.bu")]
+        mock_mkstemp.side_effect = [
+            (123, "/tmp/server-abc.ign"),
+            (124, "/tmp/server-def.bu"),
+        ]
         mock_write_file = Mock()
         mock_fdopen.return_value.__enter__.return_value = mock_write_file
 
@@ -280,11 +338,24 @@ class TestConsoleController(unittest.TestCase):
 
         # Verify butane and validation commands were called
         expected_calls = [
-            call(["butane", "--pretty", "--strict", "/tmp/server-def.bu", "--output", "/tmp/server-abc.ign"],
-                 "Converting Butane to Ignition"),
-            call(["ignition-validate", "/tmp/server-abc.ign"], "Validating Ignition file")
+            call(
+                [
+                    "butane",
+                    "--pretty",
+                    "--strict",
+                    "/tmp/server-def.bu",
+                    "--output",
+                    "/tmp/server-abc.ign",
+                ],
+                "Converting Butane to Ignition",
+            ),
+            call(
+                ["ignition-validate", "/tmp/server-abc.ign"], "Validating Ignition file"
+            ),
         ]
-        self.mock_view.execute_with_progress.assert_has_calls(expected_calls, any_order=False)
+        self.mock_view.execute_with_progress.assert_has_calls(
+            expected_calls, any_order=False
+        )
 
         mock_download.assert_called_once()
         mock_customize.assert_called_once()
@@ -301,7 +372,7 @@ class TestConsoleController(unittest.TestCase):
         self.mock_view.show_error.assert_called()
         self.mock_view.confirm_proceed.assert_not_called()
 
-    @patch('tempfile.mkstemp')
+    @patch("tempfile.mkstemp")
     def test_create_iso_user_cancellation(self, mock_mkstemp):
         """Test ISO creation when user cancels."""
         self.mock_view.configure_settings.return_value = self.valid_config
@@ -338,7 +409,7 @@ class TestInteractiveController(unittest.TestCase):
         self.mock_view = Mock()
         self.controller = InteractiveController(self.mock_view)
 
-    @patch.object(ConsoleController, 'create_iso')
+    @patch.object(ConsoleController, "create_iso")
     def test_run(self, mock_create_iso):
         """Test interactive controller run method."""
         self.controller.run()
@@ -347,5 +418,5 @@ class TestInteractiveController(unittest.TestCase):
         mock_create_iso.assert_called_once()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

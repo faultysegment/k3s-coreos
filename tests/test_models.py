@@ -6,7 +6,12 @@ import os
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
-from src.models import ISOCreationConfig, ButaneFileFinder, SSHKeyFinder, CacheDirectoryManager
+from src.models import (
+    ISOCreationConfig,
+    ButaneFileFinder,
+    SSHKeyFinder,
+    CacheDirectoryManager,
+)
 
 
 class TestISOCreationConfig(unittest.TestCase):
@@ -15,6 +20,7 @@ class TestISOCreationConfig(unittest.TestCase):
     def test_default_values(self):
         """Test default values are set correctly."""
         import getpass
+
         config = ISOCreationConfig()
         self.assertEqual(config.install_disk, "/dev/sda")
         self.assertEqual(config.username, getpass.getuser())
@@ -46,9 +52,7 @@ class TestISOCreationConfig(unittest.TestCase):
 
     def test_validation_with_all_fields(self):
         """Test validation passes with all required fields."""
-        config = ISOCreationConfig(
-            ssh_key="ssh-rsa AAAAB... test@example.com"
-        )
+        config = ISOCreationConfig(ssh_key="ssh-rsa AAAAB... test@example.com")
         errors = config.validate()
 
         self.assertEqual(len(errors), 0)
@@ -57,10 +61,11 @@ class TestISOCreationConfig(unittest.TestCase):
     def test_validation_empty_username(self):
         """Test that empty username gets replaced with system username."""
         import getpass
+
         config = ISOCreationConfig(
             ssh_key="ssh-rsa AAAAB... test@example.com",
             hostname="test-host",
-            username=""
+            username="",
         )
 
         # Empty username should be replaced with system username
@@ -81,7 +86,7 @@ class TestISOCreationConfig(unittest.TestCase):
                 ssh_key="ssh-rsa AAAAB... test@example.com",
                 hostname="test-host",
                 output_iso=tmp_path,
-                base_iso=tmp_path
+                base_iso=tmp_path,
             )
 
             self.assertTrue(config.output_iso_exists)
@@ -98,7 +103,7 @@ class TestISOCreationConfig(unittest.TestCase):
             base_iso="custom-base.iso",
             ssh_key="ssh-ed25519 AAAAC... user@host",
             hostname="custom-host",
-            username="admin"
+            username="admin",
         )
 
         self.assertEqual(config.install_disk, "/dev/nvme0n1")
@@ -112,74 +117,75 @@ class TestISOCreationConfig(unittest.TestCase):
         self.assertIsNotNone(config.cache_dir)
         self.assertIsNotNone(config.temp_dir)
 
-    @patch('getpass.getuser', return_value='testuser')
+    @patch("getpass.getuser", return_value="testuser")
     def test_default_username_from_system(self, mock_getuser):
         """Test that default username comes from system user."""
         config = ISOCreationConfig()
-        self.assertEqual(config.username, 'testuser')
+        self.assertEqual(config.username, "testuser")
         mock_getuser.assert_called_once()
 
     def test_explicit_username_overrides_default(self):
         """Test that explicitly set username overrides system default."""
-        config = ISOCreationConfig(username='custom-user')
-        self.assertEqual(config.username, 'custom-user')
+        config = ISOCreationConfig(username="custom-user")
+        self.assertEqual(config.username, "custom-user")
         # Should not be the system user (unless coincidentally the same)
         import getpass
-        if getpass.getuser() != 'custom-user':
+
+        if getpass.getuser() != "custom-user":
             self.assertNotEqual(config.username, getpass.getuser())
 
 
 class TestCacheDirectoryManager(unittest.TestCase):
     """Test cases for CacheDirectoryManager class."""
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_system_cache_dir_linux(self, mock_system):
         """Test cache directory detection on Linux."""
-        mock_system.return_value = 'Linux'
-        with patch.dict('os.environ', {}, clear=True):
+        mock_system.return_value = "Linux"
+        with patch.dict("os.environ", {}, clear=True):
             cache_dir = CacheDirectoryManager.get_system_cache_dir()
             expected = Path.home() / ".cache"
             self.assertEqual(cache_dir, expected)
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_system_cache_dir_linux_xdg(self, mock_system):
         """Test cache directory detection on Linux with XDG_CACHE_HOME."""
-        mock_system.return_value = 'Linux'
+        mock_system.return_value = "Linux"
         test_cache_home = "/custom/cache"
-        with patch.dict('os.environ', {'XDG_CACHE_HOME': test_cache_home}):
+        with patch.dict("os.environ", {"XDG_CACHE_HOME": test_cache_home}):
             cache_dir = CacheDirectoryManager.get_system_cache_dir()
             self.assertEqual(cache_dir, Path(test_cache_home))
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_system_cache_dir_macos(self, mock_system):
         """Test cache directory detection on macOS."""
-        mock_system.return_value = 'Darwin'
+        mock_system.return_value = "Darwin"
         cache_dir = CacheDirectoryManager.get_system_cache_dir()
         expected = Path.home() / "Library" / "Caches"
         self.assertEqual(cache_dir, expected)
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_system_cache_dir_windows(self, mock_system):
         """Test cache directory detection on Windows."""
-        mock_system.return_value = 'Windows'
+        mock_system.return_value = "Windows"
         test_local_appdata = "C:\\Users\\TestUser\\AppData\\Local"
-        with patch.dict('os.environ', {'LOCALAPPDATA': test_local_appdata}):
+        with patch.dict("os.environ", {"LOCALAPPDATA": test_local_appdata}):
             cache_dir = CacheDirectoryManager.get_system_cache_dir()
             self.assertEqual(cache_dir, Path(test_local_appdata))
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_system_cache_dir_windows_fallback(self, mock_system):
         """Test cache directory detection on Windows with fallback."""
-        mock_system.return_value = 'Windows'
-        with patch.dict('os.environ', {}, clear=True):
+        mock_system.return_value = "Windows"
+        with patch.dict("os.environ", {}, clear=True):
             cache_dir = CacheDirectoryManager.get_system_cache_dir()
             expected = Path.home() / "AppData" / "Local"
             self.assertEqual(cache_dir, expected)
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_system_cache_dir_unknown_system(self, mock_system):
         """Test cache directory detection on unknown system."""
-        mock_system.return_value = 'UnknownOS'
+        mock_system.return_value = "UnknownOS"
         cache_dir = CacheDirectoryManager.get_system_cache_dir()
         expected = Path.home() / ".cache"
         self.assertEqual(cache_dir, expected)
@@ -189,7 +195,9 @@ class TestCacheDirectoryManager(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_cache = Path(tmp_dir) / "cache"
 
-            with patch.object(CacheDirectoryManager, 'get_system_cache_dir', return_value=base_cache):
+            with patch.object(
+                CacheDirectoryManager, "get_system_cache_dir", return_value=base_cache
+            ):
                 app_cache_dir = CacheDirectoryManager.get_app_cache_dir("test-app")
 
                 self.assertEqual(app_cache_dir, base_cache / "test-app")
@@ -200,13 +208,15 @@ class TestCacheDirectoryManager(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             base_cache = Path(tmp_dir) / "cache"
 
-            with patch.object(CacheDirectoryManager, 'get_system_cache_dir', return_value=base_cache):
+            with patch.object(
+                CacheDirectoryManager, "get_system_cache_dir", return_value=base_cache
+            ):
                 app_cache_dir = CacheDirectoryManager.get_app_cache_dir()
 
                 self.assertEqual(app_cache_dir, base_cache / "k3s-coreos")
                 self.assertTrue(app_cache_dir.exists())
 
-    @patch('tempfile.gettempdir')
+    @patch("tempfile.gettempdir")
     def test_get_temp_dir(self, mock_gettempdir):
         """Test temp directory detection."""
         mock_gettempdir.return_value = "/custom/temp"
@@ -263,9 +273,9 @@ class TestButaneFileFinder(unittest.TestCase):
     def test_get_file_info_size_formatting(self):
         """Test file size formatting for different sizes."""
         # Test with mock file sizes
-        with patch('os.path.getsize') as mock_getsize, \
-             patch('os.path.exists', return_value=True):
-
+        with patch("os.path.getsize") as mock_getsize, patch(
+            "os.path.exists", return_value=True
+        ):
             # Test bytes
             mock_getsize.return_value = 500
             info = ButaneFileFinder.get_file_info("test.bu")
@@ -285,42 +295,42 @@ class TestButaneFileFinder(unittest.TestCase):
 class TestSSHKeyFinder(unittest.TestCase):
     """Test cases for SSHKeyFinder class."""
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_ssh_directory_linux(self, mock_system):
         """Test SSH directory detection on Linux."""
-        mock_system.return_value = 'Linux'
+        mock_system.return_value = "Linux"
         ssh_dir = SSHKeyFinder.get_ssh_directory()
         expected = Path.home() / ".ssh"
         self.assertEqual(ssh_dir, expected)
 
-    @patch('platform.system')
+    @patch("platform.system")
     def test_get_ssh_directory_macos(self, mock_system):
         """Test SSH directory detection on macOS."""
-        mock_system.return_value = 'Darwin'
+        mock_system.return_value = "Darwin"
         ssh_dir = SSHKeyFinder.get_ssh_directory()
         expected = Path.home() / ".ssh"
         self.assertEqual(ssh_dir, expected)
 
-    @patch('platform.system')
-    @patch('os.environ', {'USERPROFILE': 'C:\\Users\\TestUser', 'USERNAME': 'TestUser'})
+    @patch("platform.system")
+    @patch("os.environ", {"USERPROFILE": "C:\\Users\\TestUser", "USERNAME": "TestUser"})
     def test_get_ssh_directory_windows_existing(self, mock_system):
         """Test SSH directory detection on Windows with existing directory."""
-        mock_system.return_value = 'Windows'
+        mock_system.return_value = "Windows"
 
-        with patch.object(Path, 'exists') as mock_exists:
+        with patch.object(Path, "exists") as mock_exists:
             mock_exists.side_effect = lambda: str(self) == str(Path.home() / ".ssh")
 
             ssh_dir = SSHKeyFinder.get_ssh_directory()
             expected = Path.home() / ".ssh"
             self.assertEqual(ssh_dir, expected)
 
-    @patch('platform.system')
-    @patch('os.environ', {'USERPROFILE': 'C:\\Users\\TestUser', 'USERNAME': 'TestUser'})
+    @patch("platform.system")
+    @patch("os.environ", {"USERPROFILE": "C:\\Users\\TestUser", "USERNAME": "TestUser"})
     def test_get_ssh_directory_windows_fallback(self, mock_system):
         """Test SSH directory detection on Windows with fallback."""
-        mock_system.return_value = 'Windows'
+        mock_system.return_value = "Windows"
 
-        with patch.object(Path, 'exists', return_value=False):
+        with patch.object(Path, "exists", return_value=False):
             ssh_dir = SSHKeyFinder.get_ssh_directory()
             expected = Path.home() / ".ssh"
             self.assertEqual(ssh_dir, expected)
@@ -328,7 +338,9 @@ class TestSSHKeyFinder(unittest.TestCase):
     def test_get_default_ssh_keys_empty_directory(self):
         """Test getting SSH keys from empty directory."""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with patch.object(SSHKeyFinder, 'get_ssh_directory', return_value=Path(tmp_dir)):
+            with patch.object(
+                SSHKeyFinder, "get_ssh_directory", return_value=Path(tmp_dir)
+            ):
                 keys = SSHKeyFinder.get_default_ssh_keys()
                 self.assertEqual(keys, {})
 
@@ -342,10 +354,12 @@ class TestSSHKeyFinder(unittest.TestCase):
             rsa_path = Path(tmp_dir) / "id_rsa.pub"
             ed25519_path = Path(tmp_dir) / "id_ed25519.pub"
 
-            rsa_path.write_text(rsa_key, encoding='utf-8')
-            ed25519_path.write_text(ed25519_key, encoding='utf-8')
+            rsa_path.write_text(rsa_key, encoding="utf-8")
+            ed25519_path.write_text(ed25519_key, encoding="utf-8")
 
-            with patch.object(SSHKeyFinder, 'get_ssh_directory', return_value=Path(tmp_dir)):
+            with patch.object(
+                SSHKeyFinder, "get_ssh_directory", return_value=Path(tmp_dir)
+            ):
                 keys = SSHKeyFinder.get_default_ssh_keys()
 
                 self.assertEqual(len(keys), 2)
@@ -354,7 +368,7 @@ class TestSSHKeyFinder(unittest.TestCase):
 
     def test_get_primary_ssh_key_empty(self):
         """Test getting primary SSH key when no keys exist."""
-        with patch.object(SSHKeyFinder, 'get_default_ssh_keys', return_value={}):
+        with patch.object(SSHKeyFinder, "get_default_ssh_keys", return_value={}):
             primary_key = SSHKeyFinder.get_primary_ssh_key()
             self.assertIsNone(primary_key)
 
@@ -364,10 +378,10 @@ class TestSSHKeyFinder(unittest.TestCase):
             "rsa": "ssh-rsa AAAAB... rsa@host",
             "dsa": "ssh-dss AAAAB... dsa@host",
             "ecdsa": "ssh-ecdsa AAAAB... ecdsa@host",
-            "ed25519": "ssh-ed25519 AAAAC... ed25519@host"
+            "ed25519": "ssh-ed25519 AAAAC... ed25519@host",
         }
 
-        with patch.object(SSHKeyFinder, 'get_default_ssh_keys', return_value=keys):
+        with patch.object(SSHKeyFinder, "get_default_ssh_keys", return_value=keys):
             primary_key = SSHKeyFinder.get_primary_ssh_key()
             self.assertEqual(primary_key, keys["ed25519"])
 
@@ -377,11 +391,15 @@ class TestSSHKeyFinder(unittest.TestCase):
         primary_key = "ssh-rsa AAAAB... user@host"
         ssh_dir = Path.home() / ".ssh"
 
-        with patch.object(SSHKeyFinder, 'get_ssh_directory', return_value=ssh_dir), \
-             patch.object(SSHKeyFinder, 'get_default_ssh_keys', return_value=keys), \
-             patch.object(SSHKeyFinder, 'get_primary_ssh_key', return_value=primary_key), \
-             patch.object(Path, 'exists', return_value=True):
-
+        with patch.object(
+            SSHKeyFinder, "get_ssh_directory", return_value=ssh_dir
+        ), patch.object(
+            SSHKeyFinder, "get_default_ssh_keys", return_value=keys
+        ), patch.object(
+            SSHKeyFinder, "get_primary_ssh_key", return_value=primary_key
+        ), patch.object(
+            Path, "exists", return_value=True
+        ):
             info = SSHKeyFinder.get_ssh_info()
 
             self.assertEqual(info["ssh_dir"], str(ssh_dir))
@@ -395,14 +413,14 @@ class TestSSHKeyFinder(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Create a file that will cause read errors
             bad_key_path = Path(tmp_dir) / "id_rsa.pub"
-            bad_key_path.write_text("valid content", encoding='utf-8')
+            bad_key_path.write_text("valid content", encoding="utf-8")
 
-            with patch.object(SSHKeyFinder, 'get_ssh_directory', return_value=Path(tmp_dir)), \
-                 patch('builtins.open', side_effect=PermissionError("Access denied")):
-
+            with patch.object(
+                SSHKeyFinder, "get_ssh_directory", return_value=Path(tmp_dir)
+            ), patch("builtins.open", side_effect=PermissionError("Access denied")):
                 keys = SSHKeyFinder.get_default_ssh_keys()
                 self.assertEqual(keys, {})
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

@@ -23,16 +23,14 @@ class ConsoleController:
         self.config: ISOCreationConfig = ISOCreationConfig()
 
     @contextmanager
-    def _temp_file(self, suffix='', prefix='', content=''):
+    def _temp_file(self, suffix="", prefix="", content=""):
         """Context manager for temporary files that auto-cleanup."""
         temp_fd, temp_path = tempfile.mkstemp(
-            suffix=suffix,
-            prefix=prefix,
-            dir=str(self.config.temp_dir)
+            suffix=suffix, prefix=prefix, dir=str(self.config.temp_dir)
         )
         try:
             if content:
-                with os.fdopen(temp_fd, 'w') as f:
+                with os.fdopen(temp_fd, "w") as f:
                     f.write(content)
             else:
                 os.close(temp_fd)
@@ -66,6 +64,7 @@ class ConsoleController:
         try:
             # Try to get from package resources first
             from . import resources
+
             template_path = Path(__file__).parent / "resources" / "server.bu"
         except ImportError:
             # Fallback for direct script execution
@@ -75,22 +74,28 @@ class ConsoleController:
             raise ValueError(f"Template file not found: {template_path}")
 
         # Read template file
-        with open(template_path, 'r') as f:
+        with open(template_path, "r") as f:
             template_content = f.read()
 
         # Replace template variables
-        processed_content = template_content.replace('{{SSH_KEY}}', self.config.ssh_key)
-        processed_content = processed_content.replace('{{HOSTNAME}}', self.config.hostname)
-        processed_content = processed_content.replace('{{USERNAME}}', self.config.username)
+        processed_content = template_content.replace("{{SSH_KEY}}", self.config.ssh_key)
+        processed_content = processed_content.replace(
+            "{{HOSTNAME}}", self.config.hostname
+        )
+        processed_content = processed_content.replace(
+            "{{USERNAME}}", self.config.username
+        )
 
         # Use context manager for temp file
-        with self._temp_file(suffix='.bu', prefix='server-', content=processed_content) as temp_path:
+        with self._temp_file(
+            suffix=".bu", prefix="server-", content=processed_content
+        ) as temp_path:
             yield temp_path
 
     @contextmanager
     def _create_ignition_file(self):
         """Create temporary ignition file that auto-cleans up."""
-        with self._temp_file(suffix='.ign', prefix='server-') as ignition_path:
+        with self._temp_file(suffix=".ign", prefix="server-") as ignition_path:
             # Temporarily store the path in config for other methods to use
             old_ignition_file = self.config.ignition_file
             self.config.ignition_file = ignition_path
@@ -99,7 +104,6 @@ class ConsoleController:
             finally:
                 # Restore original path
                 self.config.ignition_file = old_ignition_file
-
 
     def download_base_iso(self) -> None:
         """Download base Fedora CoreOS ISO if needed."""
@@ -158,7 +162,6 @@ class ConsoleController:
 
         print(f"🎉 Custom ISO created: {self.config.output_iso}")
         print()
-
 
     def create_iso(self) -> None:
         """Main method to create ISO with full process."""
@@ -237,5 +240,3 @@ class InteractiveController(ConsoleController):
         """Run interactive mode."""
         self.view.show_header()
         self.create_iso()
-
-

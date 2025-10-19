@@ -148,9 +148,9 @@ class ButaneFileFinder:
         if size < 1024:
             size_str = f"{size:,} bytes"
         elif size < 1024 * 1024:
-            size_str = f"{size/1024:.1f} KB"
+            size_str = f"{size / 1024:.1f} KB"
         else:
-            size_str = f"{size/(1024*1024):.1f} MB"
+            size_str = f"{size / (1024 * 1024):.1f} MB"
 
         return {"size": size, "size_str": size_str}
 
@@ -170,7 +170,7 @@ class SSHKeyFinder:
             windows_paths = [
                 Path.home() / ".ssh",
                 Path(os.environ.get("USERPROFILE", "")) / ".ssh",
-                Path("C:\\Users") / os.environ.get("USERNAME", "") / ".ssh"
+                Path("C:\\Users") / os.environ.get("USERNAME", "") / ".ssh",
             ]
             for path in windows_paths:
                 if path.exists():
@@ -194,11 +194,11 @@ class SSHKeyFinder:
             key_path = ssh_dir / key_file
             if key_path.exists() and key_path.is_file():
                 try:
-                    with open(key_path, 'r', encoding='utf-8') as f:
+                    with open(key_path, "r", encoding="utf-8") as f:
                         key_content = f.read().strip()
                     if key_content:
                         # Extract key type from filename for display
-                        key_type = key_file.replace('.pub', '').replace('id_', '')
+                        key_type = key_file.replace(".pub", "").replace("id_", "")
                         keys[key_type] = key_content
                 except Exception:
                     # Skip keys that can't be read
@@ -235,5 +235,5 @@ class SSHKeyFinder:
             "ssh_dir_exists": ssh_dir.exists(),
             "available_keys": keys,
             "primary_key": primary_key,
-            "key_count": len(keys)
+            "key_count": len(keys),
         }

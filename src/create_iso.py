@@ -27,10 +27,7 @@ def main():
         controller = InteractiveController(view)
         controller.run()
     except ImportError:
-        print(
-            "Error: Rich library is required. "
-            "Install with: pip install rich"
-        )
+        print("Error: Rich library is required. " "Install with: pip install rich")
         sys.exit(1)
     except KeyboardInterrupt:
         print("\nOperation interrupted by user")

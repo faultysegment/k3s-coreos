@@ -124,12 +124,16 @@ class TUIView(BaseView):
         ssh_info = SSHKeyFinder.get_ssh_info()
 
         if ssh_info["key_count"] == 0:
-            self.console.print("[yellow]No SSH keys found in default locations[/yellow]")
+            self.console.print(
+                "[yellow]No SSH keys found in default locations[/yellow]"
+            )
             self.console.print(f"[dim]Looked in: {ssh_info['ssh_dir']}[/dim]")
             return Prompt.ask("SSH public key (paste the entire key)")
 
         # Show available keys
-        self.console.print(f"[green]Found {ssh_info['key_count']} SSH key(s) in {ssh_info['ssh_dir']}[/green]")
+        self.console.print(
+            f"[green]Found {ssh_info['key_count']} SSH key(s) in {ssh_info['ssh_dir']}[/green]"
+        )
 
         table = Table(title="Available SSH Keys")
         table.add_column("#", justify="right", style="cyan", no_wrap=True)
@@ -150,17 +154,15 @@ class TUIView(BaseView):
         self.console.print()
 
         choices = [str(i) for i in range(1, len(key_list) + 2)]
-        choice = Prompt.ask(
-            "Select SSH key",
-            choices=choices,
-            default="1"
-        )
+        choice = Prompt.ask("Select SSH key", choices=choices, default="1")
 
         choice_idx = int(choice) - 1
         if choice_idx < len(key_list):
             # User selected a default key
             selected_key_type, selected_key = key_list[choice_idx]
-            self.console.print(f"[green]Selected {selected_key_type.upper()} key[/green]")
+            self.console.print(
+                f"[green]Selected {selected_key_type.upper()} key[/green]"
+            )
             return selected_key
         else:
             # User chose manual entry
@@ -174,7 +176,11 @@ class TUIView(BaseView):
 
         # SSH key (truncated for display)
         if config.ssh_key:
-            ssh_display = f"{config.ssh_key[:20]}..." if len(config.ssh_key) > 20 else config.ssh_key
+            ssh_display = (
+                f"{config.ssh_key[:20]}..."
+                if len(config.ssh_key) > 20
+                else config.ssh_key
+            )
             table.add_row("SSH key", ssh_display)
 
         # Show all user-configurable options
@@ -235,5 +241,3 @@ class TUIView(BaseView):
     def show_error(self, error: str) -> None:
         """Show error message with rich formatting."""
         self.console.print(f"[red]Error: {error}[/red]")
-
-
